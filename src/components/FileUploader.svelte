@@ -1,61 +1,69 @@
 <script lang="ts">
-	import { fly, fade } from "svelte/transition";
-	let files: FileList | null = null;
+	import { fade } from "svelte/transition";
+	import { sendFile } from "../stores/fileStore";
+	import Transactions from "../components/Transactions.svelte";
+
+	let files: FileList;
 	let fileSend = false;
-	console.log(process.env.BASEURL);
-	$: if (files) {
-		console.log(files);
-		for (const file of files) {
-			console.log(`${file.name}: ${file.size} bytes`);
-		}
-	}
-
+	let fileSendError = { error: false, message: "" };
+	let transactionsComponent: Transactions;
 	async function handleSubmit(e: Event) {
-		const url = `${process.env.BASEURL}/fileupload`;
-
 		const formData = new FormData();
-		formData.append("file", files[0]);
 
-		const response = await fetch(url, {
-			method: "Post",
-			body: formData,
-		});
-		const responsejson = await response.json();
+		if (files[0]) {
+			formData.append("file", files[0]);
+		}
 
-		if (response.ok) {
-			console.log(response);
-			e.target[0].value = "";
+		const { data, error } = await sendFile(formData);
+
+		if (error) {
+			fileSendError = { error: true, message: data.message };
+			setTimeout(() => {
+				fileSendError = { error: false, message: "" };
+			}, 3000);
+		} else {
 			fileSend = true;
-
-			console.table(responsejson);
+			transactionsComponent.updateTransactions();
 			setTimeout(() => {
 				fileSend = false;
 			}, 3000);
-		} else {
-			console.log(responsejson);
 		}
+		(e.target as HTMLFormElement).reset();
 	}
 </script>
 
-<main>
-	{#if fileSend}
-		<h1 transition:fade={{ duration: 150 }}>File send successfully</h1>
-	{/if}
-	<form id="sendFile" on:submit|preventDefault={handleSubmit}>
-		<div class="form-group">
-			<label for="file">Upload a file:</label>
-			<input
-				type="file"
-				bind:files
-				name="file"
-				id="file"
-				accept=".csv, text/plain"
-				required
-			/>
-		</div>
-		<button class="btn btn-full">Send file</button>
-	</form>
-</main>
+<div>
+	<h1 class="import-title">Importar transações</h1>
+	<main>
+		{#if fileSend}
+			<h1 class="file-sent" transition:fade={{ duration: 150 }}>File send successfully</h1>
+		{/if}
+
+		{#if fileSendError.error}
+			<div transition:fade={{ duration: 150 }}>
+				<h1>File send error</h1>
+				<p>{fileSendError.message}</p>
+			</div>
+		{/if}
+
+		<form id="sendFile" on:submit|preventDefault={handleSubmit}>
+			<div class="form-group">
+				<label for="file">Upload a file:</label>
+				<input
+					type="file"
+					bind:files
+					name="file"
+					id="file"
+					accept=".csv, text/plain"
+					required
+					placeholder="Upload a file"
+				/>
+			</div>
+			<button class="btn btn-full">Send file</button>
+		</form>
+	</main>
+	<Transactions bind:this={transactionsComponent} />
+</div>
 
 <style>
 	main {
@@ -64,8 +72,11 @@
 		max-width: 240px;
 		margin: 0 auto;
 	}
+	h1.import-title {
+		text-align: center;
+	}
 
-	h1 {
+	h1.file-sent {
 		color: #ff3e00;
 		text-transform: uppercase;
 		font-size: 1.5em;
